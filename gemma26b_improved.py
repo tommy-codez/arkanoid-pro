@@ -103,7 +103,17 @@ class Particle:
         self.vy = random.uniform(-6, -2)
         self.life = 1.0
         self.decay = random.uniform(0.02, 0.04)
-        self.color = color
+        # Ensure color is always a valid RGB tuple with integers 0-255
+        try:
+            if isinstance(color, (list, tuple)) and len(color) >= 3:
+                r = max(0, min(255, int(color[0])))
+                g = max(0, min(255, int(color[1])))
+                b = max(0, min(255, int(color[2])))
+                self.color = (r, g, b)
+            else:
+                self.color = (255, 255, 255)
+        except (TypeError, ValueError):
+            self.color = (255, 255, 255)
         self.size = random.uniform(3, 6)
 
     def update(self):
@@ -188,9 +198,11 @@ class Ball:
 
 
 class Brick:
-    def __init__(self, x, y, w, h, color):
+    def __init__(self, x, y, w, h, color, hp=1):
         self.rect = pygame.Rect(x, y, w, h)
         self.color = color
+        self.hp = hp  # Health points - how many hits to destroy
+        self.max_hp = hp
 
 
 class Powerup:
@@ -369,20 +381,28 @@ class ArkanoidGame:
 
     def generate_level(self):
         self.bricks = []
-        colors = [
-            (255, 50, 50),
-            (50, 255, 50),
-            (50, 50, 255),
-            (255, 255, 50),
-            (255, 50, 255),
-        ]
+        colors = [(255, 50, 50), (50, 255, 50), (50, 50, 255), (255, 255, 50), (255, 50, 255)]
+        hp_colors = [(255, 140, 0), (138, 43, 226), (255, 105, 180)]
         w = (WIDTH - (BRICK_COLS + 1) * BRICK_PADDING) // BRICK_COLS
+
+        num_multi_hit = min(3, self.level)
+        
+        brick_list = []
         for r in range(BRICK_ROWS):
             for c in range(BRICK_COLS):
                 x = c * (w + BRICK_PADDING) + BRICK_PADDING
                 y = r * (BRICK_HEIGHT + BRICK_PADDING) + 60
-                self.bricks.append(Brick(x, y, w, BRICK_HEIGHT, random.choice(colors)))
+                brick_list.append((x, y))
 
+        multi_positions = random.sample(brick_list, min(num_multi_hit, len(brick_list)))
+
+        for i, (x, y) in enumerate(brick_list):
+            if (x, y) in multi_positions:
+                hp = 2 + (self.level - 1) // 3
+                color = random.choice(hp_colors)
+                self.bricks.append(Brick(x, y, w, BRICK_HEIGHT, color, hp))
+            else:
+                self.bricks.append(Brick(x, y, w, BRICK_HEIGHT, random.choice(colors), 1))
     def trigger_shake(self, duration):
         self.shake_timer = duration
 
@@ -405,14 +425,21 @@ class ArkanoidGame:
 
             for brick in self.bricks[:]:
                 if ball.rect.colliderect(brick.rect):
-                    for _ in range(10):
-                        self.particles.append(
-                            Particle(
-                                brick.rect.centerx, brick.rect.centery, brick.color
-                            )
-                        )
-                    self.score += 10
-                    self.bricks.remove(brick)
+                    brick.hp -= 1
+                    
+                    num_particles = 8 + brick.max_hp * 3
+                    for i in range(num_particles):
+                        # Ensure color values are valid integers between 0-255
+                        r = max(0, min(255, int(brick.color[0] * random.uniform(0.7, 1.3))))
+                        g = max(0, min(255, int(brick.color[1] * random.uniform(0.7, 1.3))))
+                        b = max(0, min(255, int(brick.color[2] * random.uniform(0.7, 1.3))))
+                        particle_color = (r, g, b)
+                        self.particles.append(Particle(brick.rect.centerx, brick.rect.centery, particle_color))
+                    
+                    self.score += brick.max_hp * 5
+                    
+                    if brick.hp <= 0:
+                        self.bricks.remove(brick)
                     self.sound.play_explosion()
                     self.trigger_shake(3)
 
@@ -540,7 +567,23 @@ class ArkanoidGame:
 
         self.draw_background()
         for b in self.bricks:
-            pygame.draw.rect(self.screen, b.color, b.rect.move(off_x, off_y))
+            # Draw brick with HP indicator for multi-hit bricks
+            inner_rect = b.rect.move(off_x, off_y)
+            pygame.draw.rect(self.screen, b.color, inner_rect)
+            
+            if b.max_hp > 1:
+                # Draw HP bar on top of brick
+                hp_width = int(b.rect.width * (b.hp / b.max_hp))
+                hp_color = (0, 255, 0) if b.hp == b.max_hp else (255, 255, 0) if b.hp > 1 else (255, 0, 0)
+                pygame.draw.rect(self.screen, hp_color, 
+                               (inner_rect.x, inner_rect.y + inner_rect.height - 4, 
+                                hp_width, 3))
+                
+                # Draw HP number in center
+                font = pygame.font.SysFont("Arial", 16, bold=True)
+                hp_text = font.render(str(b.hp), True, (255, 255, 255))
+                text_rect = hp_text.get_rect(center=(inner_rect.centerx, inner_rect.centery))
+                self.screen.blit(hp_text, text_rect)
         for p in self.particles:
             p.draw(self.screen)
         for pu in self.powerups:
