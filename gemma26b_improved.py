@@ -170,7 +170,7 @@ class Ball:
         glow_size = 6
         glow_surface = pygame.Surface(
             (self.rect.width + glow_size * 2, self.rect.height + glow_size * 2),
-            pygame.SRCALPHA
+            pygame.SRCALPHA,
         )
 
         for i in range(3, 0, -1):
@@ -278,7 +278,7 @@ class Paddle:
 
         for i in range(4, 0, -1):
             alpha = int(100 * (i / 4))
-            glow_color = (*NEON_COLORS['paddle'][:3], alpha)
+            glow_color = (*NEON_COLORS["paddle"][:3], alpha)
             rect = pygame.Rect(
                 -glow_size + i * 2,
                 -glow_size + i * 2,
@@ -289,15 +289,19 @@ class Paddle:
 
         surface.blit(glow_surface, (self.rect.x - glow_size, self.rect.y - glow_size))
 
-        inner_surface = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
+        inner_surface = pygame.Surface(
+            (self.rect.width, self.rect.height), pygame.SRCALPHA
+        )
         pygame.draw.rect(
-            inner_surface, (*NEON_COLORS['paddle'], 255), 
-            (0, 0, self.rect.width, self.rect.height), border_radius=5
+            inner_surface,
+            (*NEON_COLORS["paddle"], 255),
+            (0, 0, self.rect.width, self.rect.height),
+            border_radius=5,
         )
         surface.blit(inner_surface, self.rect.topleft)
 
         highlight = pygame.Surface((self.rect.width, 3))
-        highlight.fill((*NEON_COLORS['paddle'], 180))
+        highlight.fill((*NEON_COLORS["paddle"], 180))
         surface.blit(highlight, (self.rect.x, self.rect.y + 2))
 
 
@@ -354,7 +358,6 @@ class ArkanoidGame:
             star.update()
             star.draw(self.screen)
 
-
     def reset_game(self):
         """Kompletter Reset (Game Over Szenario)"""
         self.level = 1
@@ -379,30 +382,111 @@ class ArkanoidGame:
         speed_mult = 1.0 + (self.level - 1) * 0.15
         self.balls = [Ball(WIDTH // 2, HEIGHT - 60, speed_mult)]
 
+    def _calculate_brick_width(self):
+        return (WIDTH - (BRICK_COLS + 1) * BRICK_PADDING) // BRICK_COLS
+
     def generate_level(self):
         self.bricks = []
-        colors = [(255, 50, 50), (50, 255, 50), (50, 50, 255), (255, 255, 50), (255, 50, 255)]
+        colors = [
+            (255, 50, 50),
+            (50, 255, 50),
+            (50, 50, 255),
+            (255, 255, 50),
+            (255, 50, 255),
+        ]
         hp_colors = [(255, 140, 0), (138, 43, 226), (255, 105, 180)]
-        w = (WIDTH - (BRICK_COLS + 1) * BRICK_PADDING) // BRICK_COLS
+        w = self._calculate_brick_width()
 
         num_multi_hit = min(3, self.level)
-        
-        brick_list = []
-        for r in range(BRICK_ROWS):
-            for c in range(BRICK_COLS):
-                x = c * (w + BRICK_PADDING) + BRICK_PADDING
-                y = r * (BRICK_HEIGHT + BRICK_PADDING) + 60
-                brick_list.append((x, y))
 
-        multi_positions = random.sample(brick_list, min(num_multi_hit, len(brick_list)))
+        layout_type = self.level % 4
 
-        for i, (x, y) in enumerate(brick_list):
+        if layout_type == 0:
+            positions = self._generate_circle_layout(w)
+        elif layout_type == 1:
+            positions = self._generate_pyramid_layout(w)
+        else:
+            positions = self._generate_wavy_layout(w)
+
+        multi_positions = random.sample(positions, min(num_multi_hit, len(positions)))
+
+        for x, y in positions:
             if (x, y) in multi_positions:
                 hp = 2 + (self.level - 1) // 3
                 color = random.choice(hp_colors)
                 self.bricks.append(Brick(x, y, w, BRICK_HEIGHT, color, hp))
             else:
-                self.bricks.append(Brick(x, y, w, BRICK_HEIGHT, random.choice(colors), 1))
+                self.bricks.append(
+                    Brick(x, y, w, BRICK_HEIGHT, random.choice(colors), 1)
+                )
+
+    def _generate_circle_layout(self, w):
+        positions = []
+        center_x = WIDTH // 2
+        center_y = 150
+        radius = min(WIDTH, HEIGHT) // 3
+
+        for angle in range(0, 360, 360 // BRICK_COLS):
+            rad = math.radians(angle)
+            x = center_x + radius * math.cos(rad) - w / 2
+            y = center_y + radius * math.sin(rad)
+            if 0 <= x and x + w <= WIDTH and 0 <= y < HEIGHT - 100:
+                positions.append((x, y))
+
+        return positions if positions else self._generate_default_positions(w)
+
+    def _generate_pyramid_layout(self, w):
+        positions = []
+        start_y = 60
+        pyramid_rows = min(BRICK_ROWS, 5)
+
+        for row in range(pyramid_rows):
+            cols_in_row = BRICK_COLS - row * 2
+            if cols_in_row <= 0:
+                break
+            row_width = cols_in_row * (w + BRICK_PADDING)
+            start_x = (WIDTH - row_width) // 2
+
+            for col in range(cols_in_row):
+                x = start_x + col * (w + BRICK_PADDING)
+                y = start_y + row * (BRICK_HEIGHT + BRICK_PADDING)
+                if 0 <= x and x + w <= WIDTH:
+                    positions.append((x, y))
+
+        return positions if positions else self._generate_default_positions(w)
+
+    def _generate_wavy_layout(self, w):
+        positions = []
+        num_rows = min(BRICK_ROWS, 4)
+
+        for row in range(num_rows):
+            offset = math.sin(row * 0.5) * 80
+            y = 60 + row * (BRICK_HEIGHT + BRICK_PADDING)
+
+            cols_in_row = BRICK_COLS
+
+            if row % 2 == 1:
+                start_x = BRICK_PADDING + w / 2 + offset
+            else:
+                start_x = BRICK_PADDING - w / 2 + offset
+
+            for col in range(cols_in_row):
+                x = start_x + col * (w + BRICK_PADDING)
+                if 0 <= x and x + w <= WIDTH:
+                    positions.append((x, y))
+
+        return positions if positions else self._generate_default_positions(w)
+
+    def _generate_default_positions(self, w):
+        positions = []
+        for r in range(BRICK_ROWS):
+            for c in range(BRICK_COLS):
+                x = c * (w + BRICK_PADDING) + BRICK_PADDING
+                y = r * (BRICK_HEIGHT + BRICK_PADDING) + 60
+                if 0 <= x and x + w <= WIDTH:
+                    positions.append((x, y))
+        return positions
+
     def trigger_shake(self, duration):
         self.shake_timer = duration
 
@@ -426,18 +510,28 @@ class ArkanoidGame:
             for brick in self.bricks[:]:
                 if ball.rect.colliderect(brick.rect):
                     brick.hp -= 1
-                    
+
                     num_particles = 8 + brick.max_hp * 3
                     for i in range(num_particles):
                         # Ensure color values are valid integers between 0-255
-                        r = max(0, min(255, int(brick.color[0] * random.uniform(0.7, 1.3))))
-                        g = max(0, min(255, int(brick.color[1] * random.uniform(0.7, 1.3))))
-                        b = max(0, min(255, int(brick.color[2] * random.uniform(0.7, 1.3))))
+                        r = max(
+                            0, min(255, int(brick.color[0] * random.uniform(0.7, 1.3)))
+                        )
+                        g = max(
+                            0, min(255, int(brick.color[1] * random.uniform(0.7, 1.3)))
+                        )
+                        b = max(
+                            0, min(255, int(brick.color[2] * random.uniform(0.7, 1.3)))
+                        )
                         particle_color = (r, g, b)
-                        self.particles.append(Particle(brick.rect.centerx, brick.rect.centery, particle_color))
-                    
+                        self.particles.append(
+                            Particle(
+                                brick.rect.centerx, brick.rect.centery, particle_color
+                            )
+                        )
+
                     self.score += brick.max_hp * 5
-                    
+
                     if brick.hp <= 0:
                         self.bricks.remove(brick)
                     self.sound.play_explosion()
@@ -570,19 +664,29 @@ class ArkanoidGame:
             # Draw brick with HP indicator for multi-hit bricks
             inner_rect = b.rect.move(off_x, off_y)
             pygame.draw.rect(self.screen, b.color, inner_rect)
-            
+
             if b.max_hp > 1:
                 # Draw HP bar on top of brick
                 hp_width = int(b.rect.width * (b.hp / b.max_hp))
-                hp_color = (0, 255, 0) if b.hp == b.max_hp else (255, 255, 0) if b.hp > 1 else (255, 0, 0)
-                pygame.draw.rect(self.screen, hp_color, 
-                               (inner_rect.x, inner_rect.y + inner_rect.height - 4, 
-                                hp_width, 3))
-                
+                hp_color = (
+                    (0, 255, 0)
+                    if b.hp == b.max_hp
+                    else (255, 255, 0)
+                    if b.hp > 1
+                    else (255, 0, 0)
+                )
+                pygame.draw.rect(
+                    self.screen,
+                    hp_color,
+                    (inner_rect.x, inner_rect.y + inner_rect.height - 4, hp_width, 3),
+                )
+
                 # Draw HP number in center
                 font = pygame.font.SysFont("Arial", 16, bold=True)
                 hp_text = font.render(str(b.hp), True, (255, 255, 255))
-                text_rect = hp_text.get_rect(center=(inner_rect.centerx, inner_rect.centery))
+                text_rect = hp_text.get_rect(
+                    center=(inner_rect.centerx, inner_rect.centery)
+                )
                 self.screen.blit(hp_text, text_rect)
         for p in self.particles:
             p.draw(self.screen)
