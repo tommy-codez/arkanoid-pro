@@ -117,7 +117,7 @@ class Particle:
         self.size = random.uniform(3, 6)
 
     def update(self):
-        self.vy += 0.25
+        self.vy += 0.15
         self.x += self.vx
         self.y += self.vy
         self.life -= self.decay
@@ -209,7 +209,7 @@ class Powerup:
     def __init__(self, x, y, type_char):
         self.rect = pygame.Rect(x, y, 25, 25)
         self.type = type_char
-        self.speed = 3
+        self.speed = 2
 
     def update(self):
         self.rect.y += self.speed
@@ -223,6 +223,7 @@ class Powerup:
             "W": (0, 255, 255),
             "F": (255, 69, 0),
             "S": (200, 200, 200),
+            "H": (255, 105, 180),
         }
         pygame.draw.rect(surface, colors[self.type], self.rect)
         font = pygame.font.SysFont("Arial", 18, bold=True)
@@ -232,7 +233,7 @@ class Powerup:
 
 class Projectile:
     def __init__(self, x, y):
-        self.rect = pygame.Rect(x, y, 5, 15)
+        self.rect = pygame.Rect(x, y, 5, 25)
         self.speed = -8
 
     def update(self):
@@ -399,14 +400,16 @@ class ArkanoidGame:
 
         num_multi_hit = min(3, self.level)
 
-        layout_type = self.level % 4
+        layout_type = random.randint(0, 3)
 
         if layout_type == 0:
             positions = self._generate_circle_layout(w)
         elif layout_type == 1:
             positions = self._generate_pyramid_layout(w)
-        else:
+        elif layout_type == 2:
             positions = self._generate_wavy_layout(w)
+        else:
+            positions = self._generate_grid_layout(w)
 
         multi_positions = random.sample(positions, min(num_multi_hit, len(positions)))
 
@@ -477,6 +480,22 @@ class ArkanoidGame:
 
         return positions if positions else self._generate_default_positions(w)
 
+    def _generate_grid_layout(self, w):
+        positions = []
+        for r in range(BRICK_ROWS):
+            offset = math.sin(r * 0.3) * 40 if r % 2 == 1 else 0
+            y = 60 + r * (BRICK_HEIGHT + BRICK_PADDING)
+
+            cols_in_row = BRICK_COLS
+            start_x = BRICK_PADDING - w / 2 + offset
+
+            for c in range(cols_in_row):
+                x = start_x + c * (w + BRICK_PADDING)
+                if 0 <= x and x + w <= WIDTH:
+                    positions.append((x, y))
+
+        return positions if positions else self._generate_default_positions(w)
+
     def _generate_default_positions(self, w):
         positions = []
         for r in range(BRICK_ROWS):
@@ -538,7 +557,7 @@ class ArkanoidGame:
                     self.trigger_shake(3)
 
                     if random.random() < 0.2:
-                        ptype = random.choice(["M", "T", "G", "L", "W", "F", "S"])
+                        ptype = random.choice(["M", "T", "G", "L", "W", "F", "S", "H"])
                         self.powerups.append(
                             Powerup(brick.rect.centerx, brick.rect.centery, ptype)
                         )
@@ -592,6 +611,8 @@ class ArkanoidGame:
             self.ghost_timer = 15 * FPS
         elif ptype == "S":
             self.slow_timer = 10 * FPS
+        elif ptype == "H":
+            self.lives += 1
 
     def update(self):
         if self.magnet_timer > 0:
@@ -693,7 +714,7 @@ class ArkanoidGame:
         for pu in self.powerups:
             pu.draw(self.screen)
         for proj in self.projectiles:
-            pygame.draw.rect(self.screen, (255, 0, 0), proj.rect.move(off_x, off_y))
+            pygame.draw.rect(self.screen, (0, 255, 255), proj.rect.move(off_x, off_y))
         for ball in self.balls:
             ball.draw(self.screen)
         self.paddle.draw(self.screen)
