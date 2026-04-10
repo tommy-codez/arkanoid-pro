@@ -33,6 +33,8 @@ NEON_COLORS = {
 # Hintergrund-Sterne
 NUM_STARS = 100
 
+HIGHSCORE_FILE = "highscore.txt"
+
 
 # --- AUDIO MANAGER ---
 class SoundManager:
@@ -204,6 +206,124 @@ class Brick:
         self.hp = hp  # Health points - how many hits to destroy
         self.max_hp = hp
 
+    def draw(self, surface, target_rect):
+        """Zeichnet den Stein mit Neon-Glass-Look (Rounded Corners & Beveling)"""
+        brick_surf = pygame.Surface(
+            (target_rect.width, target_rect.height), pygame.SRCALPHA
+        )
+        radius = 4
+
+        # 1. Basis-Farbe
+        pygame.draw.rect(
+            brick_surf,
+            self.color,
+            (0, 0, target_rect.width, target_rect.height),
+            border_radius=radius,
+        )
+
+        # 2. Beveling / Highlight
+        if target_rect.width > radius * 2 and target_rect.height > radius * 2:
+            # Oberer/Linker Rand (Highlight)
+            pygame.draw.line(
+                brick_surf,
+                (255, 255, 255, 180),
+                (radius, radius),
+                (target_rect.width - radius, radius),
+                2,
+            )
+            pygame.draw.line(
+                brick_surf,
+                (255, 255, 255, 180),
+                (radius, radius),
+                (radius, target_rect.height - radius),
+                2,
+            )
+
+            # Unterer/Rechter Rand (Schatten)
+            pygame.draw.line(
+                brick_surf,
+                (0, 0, 0, 150),
+                (target_rect.width - radius, target_rect.height - radius),
+                (target_rect.width - radius, radius),
+                2,
+            )
+            pygame.draw.line(
+                brick_surf,
+                (0, 0, 0, 150),
+                (target_rect.width - radius, target_rect.height - radius),
+                (radius, target_rect.height - radius),
+                2,
+            )
+
+            # 3. Glanz-Effekt
+            pygame.draw.circle(
+                brick_surf,
+                (255, 255, 255, 100),
+                (int(radius * 1.5), int(radius * 1.5)),
+                2,
+            )
+
+        surface.blit(brick_surf, target_rect.topleft)
+
+    def draw(self, surface, target_rect):
+        """Zeichnet den Stein mit Neon-Glass-Look (Rounded Corners & Beveling)"""
+        brick_surf = pygame.Surface(
+            (target_rect.width, target_rect.height), pygame.SRCALPHA
+        )
+        radius = 4
+
+        # 1. Basis-Farbe
+        pygame.draw.rect(
+            brick_surf,
+            self.color,
+            (0, 0, target_rect.width, target_rect.height),
+            border_radius=radius,
+        )
+
+        # 2. Beveling / Highlight
+        if target_rect.width > radius * 2 and target_rect.height > radius * 2:
+            # Oberer/Linker Rand (Highlight)
+            pygame.draw.line(
+                brick_surf,
+                (255, 255, 255, 180),
+                (radius, radius),
+                (target_rect.width - radius, radius),
+                2,
+            )
+            pygame.draw.line(
+                brick_surf,
+                (255, 255, 255, 180),
+                (radius, radius),
+                (radius, target_rect.height - radius),
+                2,
+            )
+
+            # Unterer/Rechter Rand (Schatten)
+            pygame.draw.line(
+                brick_surf,
+                (0, 0, 0, 150),
+                (target_rect.width - radius, target_rect.height - radius),
+                (target_rect.width - radius, radius),
+                2,
+            )
+            pygame.draw.line(
+                brick_surf,
+                (0, 0, 0, 150),
+                (target_rect.width - radius, target_rect.height - radius),
+                (radius, target_rect.height - radius),
+                2,
+            )
+
+            # 3. Glanz-Effekt
+            pygame.draw.circle(
+                brick_surf,
+                (255, 255, 255, 100),
+                (int(radius * 1.5), int(radius * 1.5)),
+                2,
+            )
+
+        surface.blit(brick_surf, target_rect.topleft)
+
 
 class Powerup:
     def __init__(self, x, y, type_char):
@@ -339,19 +459,21 @@ class ArkanoidGame:
         self.font = pygame.font.SysFont("Arial", 24)
         self.small_font = pygame.font.SysFont("Arial", 18, bold=True)
         self.sound = SoundManager()
-        self.highscore = 0
+        self.highscore = self._load_highscore()
         self.shake_timer = 0
         self.stars = [Star() for _ in range(NUM_STARS)]
+        self.bg_color = (10, 10, 20)  # Default dark color
         self.reset_game()
 
     def draw_background(self):
-        """Zeichnet den animierten Sternenhimmel-Hintergrund"""
+        """Zeichnet den animierten Sternenhimmel-Hintergrund mit dunklem Farbverlauf"""
         gradient_surface = pygame.Surface((WIDTH, HEIGHT))
         for y in range(HEIGHT):
             ratio = y / HEIGHT
-            r = int(10 + 5 * ratio)
-            g = int(10 + 3 * ratio)
-            b = int(20 - 10 * ratio)
+            # Erzeuge einen leichten vertikalen Verlauf basierend auf der gewählten bg_color
+            r = min(255, int(self.bg_color[0] + 5 * ratio))
+            g = min(255, int(self.bg_color[1] + 3 * ratio))
+            b = min(255, int(self.bg_color[2] + 5 * ratio))
             pygame.draw.line(gradient_surface, (r, g, b), (0, y), (WIDTH, y))
         self.screen.blit(gradient_surface, (0, 0))
 
@@ -375,8 +497,32 @@ class ArkanoidGame:
         self.laser_timer = 0
         self.wide_timer = 0
         self.slow_timer = 0
+
+        # Zufälliger dunkler Hintergrund für dieses Spiel/Level
+        self.bg_color = (
+            random.randint(5, 25),
+            random.randint(5, 25),
+            random.randint(15, 40),
+        )
+
         self._spawn_ball_for_current_level()
         self.generate_level()
+
+    def _load_highscore(self):
+        """Lädt den Highscore aus einer Datei."""
+        try:
+            with open(HIGHSCORE_FILE, "r") as f:
+                return int(f.read().strip())
+        except (FileNotFoundError, ValueError):
+            return 0
+
+    def _save_highscore(self):
+        """Speichert den Highscore in einer Datei."""
+        try:
+            with open(HIGHSCORE_FILE, "w") as f:
+                f.write(str(self.highscore))
+        except Exception as e:
+            print(f"Fehler beim Speichern des Highscores: {e}")
 
     def _spawn_ball_for_current_level(self):
         """Spawnt einen neuen Ball basierend auf dem aktuellen Level-Faktor."""
@@ -672,6 +818,7 @@ class ArkanoidGame:
                 # Game Over
                 if self.score > self.highscore:
                     self.highscore = self.score
+                    self._save_highscore()
                 self.reset_game()
 
     def draw(self):
@@ -684,7 +831,7 @@ class ArkanoidGame:
         for b in self.bricks:
             # Draw brick with HP indicator for multi-hit bricks
             inner_rect = b.rect.move(off_x, off_y)
-            pygame.draw.rect(self.screen, b.color, inner_rect)
+            b.draw(self.screen, inner_rect)
 
             if b.max_hp > 1:
                 # Draw HP bar on top of brick
